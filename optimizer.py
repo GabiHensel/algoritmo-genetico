@@ -13,6 +13,7 @@ def run_optimizer(h_us, num_sprints, limite_custo):
             if sprint > 0:
                 sprint_map[sprint].append(idx)
 
+        # Remove requisitos até respeitar limite de custo
         for sprint_id, indices in sprint_map.items():
             custo_total = sum(h_us[i]["custo"] for i in indices)
             while custo_total > limite_custo and indices:
@@ -20,7 +21,32 @@ def run_optimizer(h_us, num_sprints, limite_custo):
                 solution[pior] = 0
                 indices.remove(pior)
                 custo_total = sum(h_us[i]["custo"] for i in indices)
+
+        # Tenta preencher espaço sobrando
+        for sprint_id, indices in sprint_map.items():
+            custo_total = sum(h_us[i]["custo"] for i in indices)
+            espaco_restante = limite_custo - custo_total
+
+            candidatos = [
+                i for i, s in enumerate(solution)
+                if s == 0 and h_us[i]["custo"] <= espaco_restante
+            ]
+
+            # Ordena candidatos por eficiência
+            candidatos.sort(key=lambda i: (h_us[i]["importancia"] / h_us[i]["custo"]), reverse=True)
+
+            for i in candidatos:
+                if h_us[i]["custo"] <= espaco_restante:
+                    solution[i] = sprint_id
+                    espaco_restante -= h_us[i]["custo"]
+
         return solution
+
+    def on_generation(instance):
+        for i in range(instance.population.shape[0]):
+            instance.population[i] = corrigir_solucao(instance.population[i])
+        best = instance.best_solution()[1]
+        fitness_history.append(best)
 
     def fitness_func(ga_instance, solution, solution_idx):
         sprint_map = {i: [] for i in range(1, num_sprints + 1)}
@@ -32,13 +58,6 @@ def run_optimizer(h_us, num_sprints, limite_custo):
             for hu in hu_list:
                 fitness += 1.0 * hu["importancia"] - 0.5 * hu["criticidade"] - 0.3 * hu["impacto"]
         return fitness
-
-
-    def on_generation(instance):
-        for i in range(instance.population.shape[0]):
-            instance.population[i] = corrigir_solucao(instance.population[i])
-        best = instance.best_solution()[1]
-        fitness_history.append(best)
 
     ga = pygad.GA(
         num_generations=50,
